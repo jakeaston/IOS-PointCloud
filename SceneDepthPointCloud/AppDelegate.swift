@@ -1,4 +1,3 @@
-
 import UIKit
 import ARKit
 
@@ -8,12 +7,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        if !ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
-            // Ensure that the device supports scene depth and present
-            //  an error-message view controller, if not.
-            let storyboard = UIStoryboard(name: "Main", bundle: nil)
-            window?.rootViewController = storyboard.instantiateViewController(withIdentifier: "unsupportedDeviceMessage")
-        }
+        // Remove the LiDAR check since we'll handle it in MainController when launching the scanner
         return true
     }
 }
