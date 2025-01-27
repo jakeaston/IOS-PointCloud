@@ -377,20 +377,22 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
     
     // Add required method from WKScriptMessageHandler protocol
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        // Handle messages from JavaScript here
         if message.name == "scannerBridge" {
             if let messageBody = message.body as? String {
                 switch messageBody {
-                case "launchScanner":
-                    launchScanner()
                 case "startNFCScanning":
                     startNFCScanning()
                 default:
                     break
                 }
             } else if let messageBody = message.body as? [String: Any] {
-                // Handle empty object message
-                launchScanner()
+                // Handle empty object (launches scanner)
+                if messageBody.isEmpty {
+                    launchScanner()
+                } else if let action = messageBody["action"] as? String, 
+                          action == "startNFCScanning" {
+                    startNFCScanning()
+                }
             }
         }
     }
@@ -423,6 +425,7 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
         nfcSession = NFCNDEFReaderSession(delegate: self,
                                          queue: DispatchQueue.main,
                                          invalidateAfterFirstRead: false)
+        nfcSession?.alertMessage = "Hold your iPhone near an NFC tag to scan it"
         nfcSession?.begin()
     }
     
