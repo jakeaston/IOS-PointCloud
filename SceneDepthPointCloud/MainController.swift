@@ -145,6 +145,14 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
             let request = URLRequest(url: url)
             webView.load(request)
         }
+        
+        // Update cookie storage code
+        HTTPCookieStorage.shared.cookieAcceptPolicy = .always
+        WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+            cookies.forEach { cookie in
+                HTTPCookieStorage.shared.setCookie(cookie)
+            }
+        }
     }
     
     @objc private func launchScanner() {
@@ -378,21 +386,17 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
     // Add required method from WKScriptMessageHandler protocol
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "scannerBridge" {
-            if let messageBody = message.body as? String {
-                switch messageBody {
-                case "startNFCScanning":
-                    startNFCScanning()
-                default:
-                    break
-                }
-            } else if let messageBody = message.body as? [String: Any] {
-                // Handle empty object (launches scanner)
-                if messageBody.isEmpty {
-                    launchScanner()
-                } else if let action = messageBody["action"] as? String, 
-                          action == "startNFCScanning" {
-                    startNFCScanning()
-                }
+            print("Received message: \(message.body)") // Debug print
+            
+            // Original scanner code - keep exactly as it was
+            if let messageBody = message.body as? [String: Any] {
+                launchScanner()
+            }
+            
+            // Separate NFC handling
+            if let messageBody = message.body as? String, 
+               messageBody == "startNFCScanning" {
+                startNFCScanning()
             }
         }
     }
@@ -424,17 +428,32 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
         
         nfcSession = NFCNDEFReaderSession(delegate: self,
                                          queue: DispatchQueue.main,
-                                         invalidateAfterFirstRead: false)
+                                         invalidateAfterFirstRead: true)
         nfcSession?.alertMessage = "Hold your iPhone near an NFC tag to scan it"
         nfcSession?.begin()
     }
     
     // MARK: - NFCNDEFReaderSessionDelegate Methods
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
-        // Notify web app of error
-        let script = "window.dispatchEvent(new CustomEvent('nfcError', { detail: '\(error.localizedDescription)' }))"
-        DispatchQueue.main.async {
-            self.webView?.evaluateJavaScript(script, completionHandler: nil)
+        // Handle specific NFC errors
+        if let readerError = error as? NFCReaderError {
+            switch readerError.code {
+            case .readerSessionInvalidationErrorFirstNDEFTagRead:
+                // Expected case when tag is read successfully
+                return
+            case .readerSessionInvalidationErrorUserCanceled:
+                // User canceled the scan
+                let script = "window.dispatchEvent(new CustomEvent('nfcError', { detail: 'Scanning canceled' }))"
+                DispatchQueue.main.async {
+                    self.webView?.evaluateJavaScript(script, completionHandler: nil)
+                }
+            default:
+                // Other errors
+                let script = "window.dispatchEvent(new CustomEvent('nfcError', { detail: '\(error.localizedDescription)' }))"
+                DispatchQueue.main.async {
+                    self.webView?.evaluateJavaScript(script, completionHandler: nil)
+                }
+            }
         }
     }
     
@@ -569,15 +588,22 @@ extension MTKView: RenderDestinationProvider {
 // MARK: - WKNavigationDelegate
 extension MainController {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Remove both loading view and splash screen with animation
-        UIView.animate(withDuration: 0.3) {
-            self.loadingView?.alpha = 0
-            self.splashView?.alpha = 0
-        } completion: { _ in
-            self.loadingView?.removeFromSuperview()
-            self.loadingView = nil
-            self.splashView?.removeFromSuperview()
-            self.splashView = nil
+        // Check if the page is fully loaded using JavaScript
+        webView.evaluateJavaScript("document.readyState") { (result, error) in
+            if let readyState = result as? String, readyState == "complete" {
+                // Remove both loading view and splash screen with animation
+                DispatchQueue.main.async {
+                    UIView.animate(withDuration: 0.3) {
+                        self.loadingView?.alpha = 0
+                        self.splashView?.alpha = 0
+                    } completion: { _ in
+                        self.loadingView?.removeFromSuperview()
+                        self.loadingView = nil
+                        self.splashView?.removeFromSuperview()
+                        self.splashView = nil
+                    }
+                }
+            }
         }
     }
     
