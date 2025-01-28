@@ -13,6 +13,5 @@ import SwiftUI
 struct AirOSWidgetBundle: WidgetBundle {
     var body: some Widget {
         AirOSWidget()
-        AirOSWidgetControl()
     }
 }

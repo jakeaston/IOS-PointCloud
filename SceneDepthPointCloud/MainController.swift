@@ -5,7 +5,7 @@ import ARKit
 import WebKit
 import CoreNFC
 
-final class MainController: UIViewController, ARSessionDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate, NFCNDEFReaderSessionDelegate {
+final class MainController: UIViewController, ARSessionDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate, NFCNDEFReaderSessionDelegate, URLSessionDownloadDelegate {
     private let isUIEnabled = true
     private var clearButton = UIButton(type: .system)
     private let confidenceControl = UISegmentedControl(items: ["Low", "Medium", "High"])
@@ -90,23 +90,21 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
         headerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(headerView)
         
-        // Simplified WebView configuration
+        // Configure for offline storage
+        let websiteDataStore = WKWebsiteDataStore.default()
         let webConfiguration = WKWebViewConfiguration()
-        webConfiguration.websiteDataStore = WKWebsiteDataStore.default()
-        webConfiguration.processPool = WKProcessPool()
+        webConfiguration.websiteDataStore = websiteDataStore
         
-        // Enable password autofill
-        if #available(iOS 15.0, *) {
-            webConfiguration.preferences.isTextInteractionEnabled = true
-        }
+        // Enable IndexedDB and increase storage limits
+        let preferences = WKPreferences()
+        preferences.javaScriptEnabled = true
+        webConfiguration.preferences = preferences
         
-        // Configure preferences
-        let webpagePreferences = WKWebpagePreferences()
-        webpagePreferences.allowsContentJavaScript = true
-        webConfiguration.defaultWebpagePreferences = webpagePreferences
-        
-        // Add JavaScript interface
-        webConfiguration.userContentController.add(self, name: "scannerBridge")
+        // Add message handlers
+        let contentController = WKUserContentController()
+        contentController.add(self, name: "scannerBridge")  // Add back the scanner bridge
+        contentController.add(self, name: "downloadBridge")
+        webConfiguration.userContentController = contentController
         
         // Create WKWebView with configuration
         webView = WKWebView(frame: view.bounds, configuration: webConfiguration)
@@ -399,6 +397,18 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
                 startNFCScanning()
             }
         }
+        
+        if message.name == "downloadBridge" {
+            if let downloadInfo = message.body as? [String: String],
+               let urlString = downloadInfo["url"],
+               let url = URL(string: urlString) {
+                
+                let config = URLSessionConfiguration.default
+                let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+                let downloadTask = session.downloadTask(with: url)
+                downloadTask.resume()
+            }
+        }
     }
     
     // Add new cleanup methods
@@ -468,6 +478,40 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
                     }
                 }
             }
+        }
+    }
+    
+    // Add new download handling methods
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let originalURL = downloadTask.originalRequest?.url,
+              let suggestedFilename = downloadTask.response?.suggestedFilename else {
+            return
+        }
+        
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let destinationURL = documentsPath.appendingPathComponent(suggestedFilename)
+        
+        do {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.moveItem(at: location, to: destinationURL)
+            
+            // Notify WebView that file is available offline
+            DispatchQueue.main.async {
+                let script = """
+                    window.dispatchEvent(new CustomEvent('fileDownloaded', {
+                        detail: {
+                            originalUrl: '\(originalURL)',
+                            localUrl: '\(destinationURL)',
+                            filename: '\(suggestedFilename)'
+                        }
+                    }));
+                """
+                self.webView?.evaluateJavaScript(script, completionHandler: nil)
+            }
+        } catch {
+            print("Error saving file: \(error)")
         }
     }
 }
@@ -549,6 +593,31 @@ extension MainController {
         let when = DispatchTime.now() + 1.75
         DispatchQueue.main.asyncAfter(deadline: when) {
             alert.dismiss(animated: true, completion: nil)
+        }
+    }
+    
+    // Add method to check for cached files
+    private func checkCachedFiles() {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: documentsPath, 
+                includingPropertiesForKeys: nil)
+            
+            let filesInfo = files.map { url -> [String: String] in
+                return [
+                    "url": url.absoluteString,
+                    "filename": url.lastPathComponent
+                ]
+            }
+            
+            // Send cached files info to WebView
+            if let jsonData = try? JSONSerialization.data(withJSONObject: filesInfo),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                let script = "window.dispatchEvent(new CustomEvent('cachedFiles', { detail: \(jsonString) }));"
+                webView?.evaluateJavaScript(script, completionHandler: nil)
+            }
+        } catch {
+            print("Error checking cached files: \(error)")
         }
     }
 }

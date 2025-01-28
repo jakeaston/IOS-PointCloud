@@ -31,7 +31,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E73DD12C24636FEF00D77039"
-               BuildableName = "Point Cloud.app"
+               BuildableName = "AirOS.app"
                BlueprintName = "SceneDepthPointCloud"
                ReferencedContainer = "container:SceneDepthPointCloud.xcodeproj">
             </BuildableReference>
@@ -72,7 +72,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E73DD12C24636FEF00D77039"
-            BuildableName = "Point Cloud.app"
+            BuildableName = "AirOS.app"
             BlueprintName = "SceneDepthPointCloud"
             ReferencedContainer = "container:SceneDepthPointCloud.xcodeproj">
          </BuildableReference>
@@ -95,7 +95,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "_XCWidgetKind"
-            value = "StatusWidget"
+            value = "AirOSWidget"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
@@ -118,7 +118,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "E73DD12C24636FEF00D77039"
-            BuildableName = "Point Cloud.app"
+            BuildableName = "AirOS.app"
             BlueprintName = "SceneDepthPointCloud"
             ReferencedContainer = "container:SceneDepthPointCloud.xcodeproj">
          </BuildableReference>

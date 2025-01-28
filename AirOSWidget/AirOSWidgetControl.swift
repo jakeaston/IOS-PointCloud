@@ -10,8 +10,9 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
+@available(iOS 17.0, *)  // Add this to explicitly mark iOS 17 requirement
 struct AirOSWidgetControl: ControlWidget {
-    static let kind: String = "com.example.apple-samplecode.SceneDepthPointCloudXE2278JU65.AirOSWidget"
+    static let kind: String = "com.yourdomain.airos.widget.control"
 
     var body: some ControlWidgetConfiguration {
         AppIntentControlConfiguration(
@@ -25,10 +26,15 @@ struct AirOSWidgetControl: ControlWidget {
             ) { isRunning in
                 Label(isRunning ? "On" : "Off", systemImage: "timer")
             }
+            // .containerBackground(.fill.tertiary, for: .widget)
         }
         .displayName("Timer")
         .description("A an example control that runs a timer.")
     }
+    
+    // Move these to the widget level
+    // .configurationDisplayName("Timer Control")
+    // .description("A control widget that runs a timer.")
 }
 
 extension AirOSWidgetControl {

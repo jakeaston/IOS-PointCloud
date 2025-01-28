@@ -62,6 +62,7 @@
 		BE6F5D762D4852B900853619 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		BE6F5D782D4852B900853619 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		BE6F5D8E2D48552900853619 /* AirOSWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AirOSWidgetExtension.entitlements; sourceTree = "<group>"; };
+		BE6F5D8F2D48E9E400853619 /* SceneDepthPointCloud.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SceneDepthPointCloud.entitlements; sourceTree = "<group>"; };
 		E73DD12D24636FEF00D77039 /* AirOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AirOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E73DD13024636FEF00D77039 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E73DD13224636FEF00D77039 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
@@ -163,6 +164,7 @@
 		E73DD12F24636FEF00D77039 /* SceneDepthPointCloud */ = {
 			isa = PBXGroup;
 			children = (
+				BE6F5D8F2D48E9E400853619 /* SceneDepthPointCloud.entitlements */,
 				E73DD13024636FEF00D77039 /* AppDelegate.swift */,
 				E73DD13724636FEF00D77039 /* MainController.swift */,
 				E73DD13224636FEF00D77039 /* Shaders.metal */,
@@ -541,7 +543,7 @@
 			baseConfigurationReference = 948146554F46E56B015690CC /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_ENTITLEMENTS = SceneDepthPointCloud/SceneDepthPointCloud.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -568,7 +570,7 @@
 			baseConfigurationReference = 948146554F46E56B015690CC /* SampleCode.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_ENTITLEMENTS = SceneDepthPointCloud/SceneDepthPointCloud.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
