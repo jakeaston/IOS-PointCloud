@@ -90,40 +90,57 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
         headerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(headerView)
         
-        // Configure for offline storage
-        let websiteDataStore = WKWebsiteDataStore.default()
+        // Configure for persistent storage
         let webConfiguration = WKWebViewConfiguration()
-        webConfiguration.websiteDataStore = websiteDataStore
         
-        // Enable IndexedDB and increase storage limits
-        let preferences = WKPreferences()
-        preferences.javaScriptEnabled = true
-        webConfiguration.preferences = preferences
+        // Enable persistent data storage
+        let dataStore = WKWebsiteDataStore.default()
+        webConfiguration.websiteDataStore = dataStore
         
-        // Add message handlers
+        // Increase storage limits and enable features
+        let preferences = WKWebpagePreferences()
+        preferences.allowsContentJavaScript = true
+        
+        // Configure process pool for shared cookies/storage
+        let processPool = WKProcessPool()
+        webConfiguration.processPool = processPool
+        
+        // Enable storage APIs
+        let script = WKUserScript(source: """
+            window.localStorage.setItem('_test', '1');
+            window.sessionStorage.setItem('_test', '1');
+            document.cookie = '_test=1';
+            if (window.indexedDB) {
+                window.indexedDB.open('_test').onsuccess = function() {};
+            }
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        
         let contentController = WKUserContentController()
-        contentController.add(self, name: "scannerBridge")  // Add back the scanner bridge
+        contentController.addUserScript(script)
+        contentController.add(self, name: "scannerBridge")
         contentController.add(self, name: "downloadBridge")
         webConfiguration.userContentController = contentController
-        
+
         // Create WKWebView with configuration
         webView = WKWebView(frame: view.bounds, configuration: webConfiguration)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        webView.allowsBackForwardNavigationGestures = true
         
-        // Enable password autofill
+        // Enable persistent storage
         webView.configuration.websiteDataStore = .default()
-        if #available(iOS 14.0, *) {
-            webView.configuration.preferences.isFraudulentWebsiteWarningEnabled = true
-        }
         
-        // Add memory pressure cleanup
-        NotificationCenter.default.addObserver(self, 
-            selector: #selector(cleanupWebViewOnMemoryWarning), 
-            name: UIApplication.didReceiveMemoryWarningNotification, 
-            object: nil)
+        // Add edge swipe gestures
+        let leftSwipe = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleLeftSwipe(_:)))
+        leftSwipe.edges = .left
+        webView.addGestureRecognizer(leftSwipe)
         
+        let rightSwipe = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleRightSwipe(_:)))
+        rightSwipe.edges = .right
+        webView.addGestureRecognizer(rightSwipe)
+        
+        // Add to view hierarchy and setup constraints
         view.addSubview(webView)
         
         // Update constraints to include header
@@ -514,6 +531,23 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
             print("Error saving file: \(error)")
         }
     }
+    
+    // Add these new methods after setupWebView
+    @objc private func handleLeftSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        if gesture.state == .ended {
+            if webView.canGoBack {
+                webView.goBack()
+            }
+        }
+    }
+    
+    @objc private func handleRightSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        if gesture.state == .ended {
+            if webView.canGoForward {
+                webView.goForward()
+            }
+        }
+    }
 }
 
 // MARK: - MTKViewDelegate
@@ -682,11 +716,13 @@ extension MainController {
         self.loadingView = nil
     }
     
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences, decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
-        preferences.allowsContentJavaScript = true
-        webView.configuration.allowsInlineMediaPlayback = true
-        webView.configuration.mediaTypesRequiringUserActionForPlayback = []
-        decisionHandler(.allow, preferences)
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // Preserve web storage during page refresh
+        if navigationAction.navigationType == .reload {
+            decisionHandler(.allow)
+            return
+        }
+        decisionHandler(.allow)
     }
 }
 
