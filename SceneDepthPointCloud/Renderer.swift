@@ -78,6 +78,7 @@ final class Renderer {
         uniforms.confidenceThreshold = Int32(confidenceThreshold)
         uniforms.particleSize = particleSize
         uniforms.cameraResolution = cameraResolution
+        uniforms.maxDepth = maxDepth
         return uniforms
     }()
     private var pointCloudUniformsBuffers = [MetalBuffer<PointCloudUniforms>]()
@@ -99,6 +100,13 @@ final class Renderer {
         didSet {
             // apply the change for the shader
             rgbUniforms.radius = rgbOn ? 2 : 0
+        }
+    }
+    
+    var maxDepth: Float = 3.0 {
+        didSet {
+            // Update uniforms when maxDepth changes
+            pointCloudUniforms.maxDepth = maxDepth
         }
     }
     

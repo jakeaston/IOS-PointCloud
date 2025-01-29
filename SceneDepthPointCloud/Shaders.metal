@@ -47,12 +47,11 @@ vertex void unprojectVertex(uint vertexID [[vertex_id]],
     const auto currentPointIndex = (uniforms.pointCloudCurrentIndex + vertexID) % uniforms.maxPoints;
     const auto texCoord = gridPoint / uniforms.cameraResolution;
     
-    // Sample the depth and check against maximum depth
-    const float maxDepth = 3.0;  // 30 centimeters
+    // Use maxDepth from uniforms instead of hardcoded value
     const auto depth = depthTexture.sample(colorSampler, texCoord).r;
-    
+    const bool depthInRange = depth <= uniforms.maxDepth;  // Using uniforms.maxDepth here
+
     // Sample the confidence map and combine with depth check
-    const bool depthInRange = depth <= maxDepth;
     const auto confidence = confidenceTexture.sample(colorSampler, texCoord).r * (depthInRange ? 1 : 0);
 
     const auto position = worldPoint(gridPoint, depth, uniforms.cameraIntrinsicsInversed, uniforms.localToWorld);

@@ -22,6 +22,17 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
     private var loadingView: UIView?  // Add this property
     private var splashView: UIView?  // Add this property with other UI elements
     private var nfcSession: NFCNDEFReaderSession?
+    private let depthSlider: UISlider = {
+        let slider = UISlider()
+        slider.minimumValue = 0.1  // 10cm
+        slider.maximumValue = 5.0  // 5m
+        slider.value = 3.0         // Default 3m
+        slider.transform = CGAffineTransform(rotationAngle: -CGFloat.pi/2) // Make vertical
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.widthAnchor.constraint(equalToConstant: 200).isActive = true  // Reduced from 400 to 200 - this will be the vertical length after rotation
+        slider.heightAnchor.constraint(equalToConstant: 30).isActive = true  // This will be the horizontal thickness after rotation
+        return slider
+    }()
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -370,6 +381,11 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
             tintColor: .white, hidden: !isUIEnabled)
         view.addSubview(rgbButton)
         
+        // Add depth slider - make sure it's added last so it's on top
+        depthSlider.addTarget(self, action: #selector(depthSliderChanged), for: .valueChanged)
+        view.addSubview(depthSlider)
+        view.bringSubviewToFront(depthSlider)  // Ensure slider is on top
+        
         NSLayoutConstraint.activate([
             clearButton.leftAnchor.constraint(equalTo: view.leftAnchor, constant: 50),
             clearButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 50),
@@ -394,8 +410,20 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
             rgbButton.rightAnchor.constraint(equalTo: view.rightAnchor, constant: -50),
             rgbButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -50),
             rgbButton.widthAnchor.constraint(equalToConstant: 60),
-            rgbButton.heightAnchor.constraint(equalToConstant: 50)
+            rgbButton.heightAnchor.constraint(equalToConstant: 50),
+            
+            // Update slider constraints
+            depthSlider.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            depthSlider.rightAnchor.constraint(equalTo: view.rightAnchor, constant: 85)  // This pushes it more to the right
         ])
+        
+        // Make sure user interaction is enabled
+        depthSlider.isUserInteractionEnabled = true
+        view.isUserInteractionEnabled = true
+    }
+    
+    @objc private func depthSliderChanged() {
+        renderer.maxDepth = depthSlider.value
     }
     
     // Add required method from WKScriptMessageHandler protocol

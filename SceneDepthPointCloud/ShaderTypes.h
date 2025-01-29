@@ -1,5 +1,3 @@
-
-
 #ifndef ShaderTypes_h
 #define ShaderTypes_h
 
@@ -34,6 +32,7 @@ struct PointCloudUniforms {
     int maxPoints;
     int pointCloudCurrentIndex;
     int confidenceThreshold;
+    float maxDepth;        // Maximum depth threshold in meters
 };
 
 struct ParticleUniforms {
