@@ -46,20 +46,25 @@ vertex void unprojectVertex(uint vertexID [[vertex_id]],
     const auto gridPoint = gridPoints[vertexID];
     const auto currentPointIndex = (uniforms.pointCloudCurrentIndex + vertexID) % uniforms.maxPoints;
     const auto texCoord = gridPoint / uniforms.cameraResolution;
-    // Sample the depth map to get the depth value
-    const auto depth = depthTexture.sample(colorSampler, texCoord).r;
-    // With a 2D point plus depth, we can now get its 3D position
-    const auto position = worldPoint(gridPoint, depth, uniforms.cameraIntrinsicsInversed, uniforms.localToWorld);
     
-    // Sample Y and CbCr textures to get the YCbCr color at the given texture coordinate
+    // Sample the depth and check against maximum depth
+    const float maxDepth = 3.0;  // 30 centimeters
+    const auto depth = depthTexture.sample(colorSampler, texCoord).r;
+    
+    // Sample the confidence map and combine with depth check
+    const bool depthInRange = depth <= maxDepth;
+    const auto confidence = confidenceTexture.sample(colorSampler, texCoord).r * (depthInRange ? 1 : 0);
+
+    const auto position = worldPoint(gridPoint, depth, uniforms.cameraIntrinsicsInversed, uniforms.localToWorld);
     const auto ycbcr = float4(capturedImageTextureY.sample(colorSampler, texCoord).r, capturedImageTextureCbCr.sample(colorSampler, texCoord.xy).rg, 1);
     const auto sampledColor = (yCbCrToRGB * ycbcr).rgb;
-    // Sample the confidence map to get the confidence value
-    const auto confidence = confidenceTexture.sample(colorSampler, texCoord).r;
+    
+    // Debug: Color points based on depth range
+    const auto finalColor = depthInRange ? sampledColor : float3(1, 0, 0);  // Red for out of range
     
     // Write the data to the buffer
     particleUniforms[currentPointIndex].position = position.xyz;
-    particleUniforms[currentPointIndex].color = sampledColor;
+    particleUniforms[currentPointIndex].color = finalColor;
     particleUniforms[currentPointIndex].confidence = confidence;
 }
 
