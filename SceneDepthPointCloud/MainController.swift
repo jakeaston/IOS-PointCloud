@@ -102,28 +102,125 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
         view.addSubview(headerView)
         
         // Configure for persistent storage
+        // Configure for persistent storage and offline capabilities
         let webConfiguration = WKWebViewConfiguration()
         
-        // Enable persistent data storage
+        // Enable persistent data storage with increased size limits
         let dataStore = WKWebsiteDataStore.default()
         webConfiguration.websiteDataStore = dataStore
         
-        // Increase storage limits and enable features
+        // Set preferences
         let preferences = WKWebpagePreferences()
         preferences.allowsContentJavaScript = true
+        webConfiguration.defaultWebpagePreferences = preferences
         
-        // Configure process pool for shared cookies/storage
-        let processPool = WKProcessPool()
-        webConfiguration.processPool = processPool
-        
-        // Enable storage APIs
+        // Enhanced script to handle API request caching
         let script = WKUserScript(source: """
-            window.localStorage.setItem('_test', '1');
-            window.sessionStorage.setItem('_test', '1');
-            document.cookie = '_test=1';
-            if (window.indexedDB) {
-                window.indexedDB.open('_test').onsuccess = function() {};
+            // Increase storage limits
+            window.webkitStorageInfo.requestQuota(
+                PERSISTENT, 
+                100 * 1024 * 1024, // 100MB
+                function(grantedBytes) {
+                    console.log('Granted storage:', grantedBytes);
+                },
+                function(error) {
+                    console.log('Error requesting storage:', error);
+                }
+            );
+            
+            // Enable service worker if available
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/service-worker.js')
+                        .then(function(registration) {
+                            console.log('ServiceWorker registration successful');
+                            
+                            // Setup API request caching
+                            caches.open('api-cache').then(function(cache) {
+                                // Intercept fetch requests
+                                self.addEventListener('fetch', function(event) {
+                                    // Check if request is an API call
+                                    if (event.request.url.includes('shared.air-os.app')) {
+                                        event.respondWith(
+                                            fetch(event.request)
+                                                .then(function(response) {
+                                                    // Clone the response as it can only be consumed once
+                                                    let responseClone = response.clone();
+                                                    cache.put(event.request, responseClone);
+                                                    return response;
+                                                })
+                                                .catch(function() {
+                                                    // If fetch fails, try to get from cache
+                                                    return cache.match(event.request);
+                                                })
+                                        );
+                                    }
+                                });
+                            });
+                        })
+                        .catch(function(error) {
+                            console.log('ServiceWorker registration failed:', error);
+                        });
+                });
             }
+            
+            // Setup XMLHttpRequest caching
+            let originalXHR = window.XMLHttpRequest;
+            window.XMLHttpRequest = function() {
+                let xhr = new originalXHR();
+                let send = xhr.send;
+                let open = xhr.open;
+                
+                xhr.open = function(method, url) {
+                    this._url = url;
+                    this._method = method;
+                    return open.apply(this, arguments);
+                };
+                
+                xhr.send = function() {
+                    if (this._url.includes('shared.air-os.app')) {
+                        // Store response in cache
+                        this.addEventListener('load', function() {
+                            if (this.status === 200) {
+                                caches.open('api-cache').then(function(cache) {
+                                    let response = new Response(this.responseText, {
+                                        headers: {
+                                            'Content-Type': this.getResponseHeader('Content-Type')
+                                        }
+                                    });
+                                    cache.put(this._url, response);
+                                });
+                            }
+                        });
+                    }
+                    return send.apply(this, arguments);
+                };
+                
+                return xhr;
+            };
+            
+            // Setup fetch API caching
+            let originalFetch = window.fetch;
+            window.fetch = function(input, init) {
+                return originalFetch(input, init)
+                    .then(function(response) {
+                        if (response.url.includes('shared.air-os.app')) {
+                            let responseClone = response.clone();
+                            caches.open('api-cache').then(function(cache) {
+                                cache.put(input, responseClone);
+                            });
+                        }
+                        return response;
+                    })
+                    .catch(function(error) {
+                        if (typeof input === 'string' && input.includes('shared.air-os.app')) {
+                            return caches.open('api-cache')
+                                .then(cache => cache.match(input))
+                                .then(response => response || Promise.reject(error));
+                        }
+                        return Promise.reject(error);
+                    });
+            };
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         
         let contentController = WKUserContentController()
@@ -137,10 +234,14 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        
+        // Enable back/forward navigation cache
         webView.allowsBackForwardNavigationGestures = true
         
-        // Enable persistent storage
+        // Add offline content handling
         webView.configuration.websiteDataStore = .default()
+        webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        webView.configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         
         // Add edge swipe gestures
         let leftSwipe = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleLeftSwipe(_:)))
@@ -182,12 +283,20 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
     }
     
     @objc private func launchScanner() {
+        // Check for Metal support
         guard let device = MTLCreateSystemDefaultDevice() else {
-            let alert = UIAlertController(title: "Unsupported Device", 
-                                        message: "This device does not support Metal, which is required for the scanner.", 
-                                        preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            present(alert, animated: true)
+            showAlert(title: "Unsupported Device", 
+                     message: "This device does not support Metal, which is required for the scanner.",
+                     shouldDismiss: false)
+            return
+        }
+        
+        // Check for ARKit and depth sensing support
+        guard ARWorldTrackingConfiguration.isSupported,
+              ARWorldTrackingConfiguration.supportsFrameSemantics([.sceneDepth, .smoothedSceneDepth]) else {
+            showAlert(title: "Unsupported Device", 
+                     message: "This device does not support depth sensing. Please use an iPhone 12 Pro or newer, or an iPad Pro 2020 or newer.",
+                     shouldDismiss: false)
             return
         }
         
@@ -576,6 +685,14 @@ final class MainController: UIViewController, ARSessionDelegate, WKNavigationDel
             }
         }
     }
+            if shouldDismiss {
+                self.dismiss(animated: true, completion: nil)
+            }
+        }
+        alertController.addAction(okAction)
+        
+        present(alertController, animated: true, completion: nil)
+    }
 }
 
 // MARK: - MTKViewDelegate
@@ -682,6 +799,30 @@ extension MainController {
             print("Error checking cached files: \(error)")
         }
     }
+    
+    // Move these methods inside MainController
+    private func loadOfflineCache() -> String? {
+        let dataStore = WKWebsiteDataStore.default()
+        var cachedHTML: String? = nil
+        
+        // Try to load from cache
+        if let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            let cacheFile = cachesURL.appendingPathComponent("offline.html")
+            cachedHTML = try? String(contentsOf: cacheFile, encoding: .utf8)
+        }
+        
+        return cachedHTML
+    }
+    
+    private func cacheCurrentPage() {
+        webView?.evaluateJavaScript("document.documentElement.outerHTML") { (result, error) in
+            if let html = result as? String,
+               let cachesURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                let cacheFile = cachesURL.appendingPathComponent("offline.html")
+                try? html.write(to: cacheFile, atomically: true, encoding: .utf8)
+            }
+        }
+    }
 }
 
 // MARK: - RenderDestinationProvider
@@ -719,6 +860,9 @@ extension MTKView: RenderDestinationProvider {
 // MARK: - WKNavigationDelegate
 extension MainController {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Cache the page for offline use
+        self.cacheCurrentPage()
+        
         // Check if the page is fully loaded using JavaScript
         webView.evaluateJavaScript("document.readyState") { (result, error) in
             if let readyState = result as? String, readyState == "complete" {
@@ -752,6 +896,27 @@ extension MainController {
         }
         decisionHandler(.allow)
     }
+    
+    // Add new WKNavigationDelegate method to handle offline loading
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if (error as NSError).code == NSURLErrorNotConnectedToInternet {
+            // Try to load cached version
+            if let offlineHTML = loadOfflineCache() {
+                webView.loadHTMLString(offlineHTML, baseURL: URL(string: "https://s1.air-os.app"))
+            } else {
+                // Show offline message
+                let offlinePage = """
+                <html>
+                    <body style="font-family: -apple-system; text-align: center; padding: 50px;">
+                        <h2>Currently Offline</h2>
+                        <p>Please check your internet connection and try again.</p>
+                    </body>
+                </html>
+                """
+                webView.loadHTMLString(offlinePage, baseURL: nil)
+            }
+        }
+    }
 }
 
 // Add new extension for WKUIDelegate
@@ -760,5 +925,12 @@ extension MainController {
         decisionHandler(.grant)
         webView.configuration.allowsInlineMediaPlayback = true
         webView.configuration.mediaTypesRequiringUserActionForPlayback = []
+    }
+}
+
+// Helper extension
+extension SIMD4 {
+    var xyz: SIMD3<Scalar> {
+        SIMD3(x: x, y: y, z: z)
     }
 }
